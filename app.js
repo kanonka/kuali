@@ -42,6 +42,8 @@ function Elevator(parent, index, startFloor) {
 
    this.isMoving = function () {return !isEmptyObject(this.stopsRequested);};  
    this.isStopNeeded = function () {
+      if (this.currentFloor == this.targetFloor)
+         return true;
       var sr = this.stopsRequested[this.currentFloor];
       if (!sr)
          return false;
@@ -60,6 +62,10 @@ function Elevator(parent, index, startFloor) {
          if (isEmptyObject(this.stopsRequested[this.currentFloor]))
             delete this.stopsRequested[this.currentFloor];
 
+         var tempArray = Object.keys(this.stopsRequested).map(function (key) { return Number(key); });
+         if (tempArray.length == 1 && this.stopsRequested[this.currentFloor] && this.currentFloor == this.targetFloor)
+            delete this.stopsRequested[this.currentFloor];
+
          // did we reach the target?
          if (this.currentFloor == this.targetFloor) {
             // ok, there are 2 choices: either this is really final stop, or
@@ -75,13 +81,16 @@ function Elevator(parent, index, startFloor) {
                return; // no more moves
             } else {
                // ouch, we have more stops requested :(
-               this.goUp = !this.goUp; // change direction we going into
                // and now find the furtherst floor from current:
-               var tempArray = Object.keys(this.stopsRequested).map(function (key) { return Number(key); });
+               
                tempArray.sort(function(a, b){
                   return Math.abs(b - self.currentFloor) - Math.abs(a - self.currentFloor);
                });
                this.targetFloor = tempArray[0];
+               // now, will we reach the target if we change direction?
+               if (!((this.targetFloor > this.currentFloor && this.goUp) || 
+                  (this.targetFloor < this.currentFloor && !this.goUp)))
+                  this.goUp = !this.goUp; // change direction we going into
                // and fall through
             }                        
          }
@@ -210,7 +219,7 @@ function ElevatorsController(elevatorsCount, floorsCount) {
 
 
 // let's test it:
-var ec = new ElevatorsController(1, 8); // start with 1 elevator for now
+var ec = new ElevatorsController(2, 8); // start with 1 elevator for now
 ec.callElevator(2, true);
 ec.callElevator(5, true);
 ec.callElevator(3, false);
