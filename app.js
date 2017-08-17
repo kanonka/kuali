@@ -17,7 +17,7 @@ function Elevator(parent, index, startFloor) {
    this.index = index;           // index of this elevator in parent array of elevators
    this.currentFloor = startFloor; // initial floor 
    this.doorsOpen = false;       // doors are closed when elevator is created
-   this.stopsRequested = {};     // list of fllors where this elevatort should stop along the road
+   this.stopsRequested = {};     // list of floors where this elevatort should stop along the road; each element is an object {goUp: (t/f), goDown: (t/f)}
 
    // because we need to report doors open/close, we need to do it via function:
    // [fulfill requirements 3) at elevator level]
@@ -30,7 +30,7 @@ function Elevator(parent, index, startFloor) {
 
    // this function will decide if elevator will pass fromFloor when moving from currentFloor to targetFloor
    this.willPassFloor = function(fromFloor, goUp) {
-      return this.targetFloor && ((this.currentFloor - fromFloor) * (this.targetFloor - currentFloor) <= 0);
+      return this.targetFloor && this.goUp === goUp && ((this.currentFloor - fromFloor)*(this.targetFloor - fromFloor) <= 0);
    };
 
    // depending of direction, target and floor, decide if target should be changed ('extended'):
@@ -40,14 +40,25 @@ function Elevator(parent, index, startFloor) {
              (!goUp && floor < this.targetFloor));    // if go down and (new) floor is lower  than target 
    };
 
-   this.isMoving = function () {return !isEmptyObject(this.stopsRequested);};   
+   this.isMoving = function () {return !isEmptyObject(this.stopsRequested);};  
+   this.isStopNeeded = function () {
+      var sr = this.stopsRequested[this.currentFloor];
+      if (!sr)
+         return false;
+      return (sr.goUp && this.goUp) || (sr.goDown && !this.goUp);
+   }
    // this function actually 'moves' the elevator
    this.move = function() {
       // first, let's us check if we are on the floor where stop was requested:
-      if (this.stopsRequested[this.currentFloor]) {
+      if (this.isStopNeeded()) {
          // hey, we need to make a short stop here to let people in/out:
          this.setDoorsState(true); // open the door
-         delete this.stopsRequested[this.currentFloor]; // depress internal floor button
+         if (this.goUp)
+            delete this.stopsRequested[this.currentFloor].goUp; // depress internal floor button
+         else
+            delete this.stopsRequested[this.currentFloor].goDown; // depress internal floor button
+         if (isEmptyObject(this.stopsRequested[this.currentFloor]))
+            delete this.stopsRequested[this.currentFloor];
 
          // did we reach the target?
          if (this.currentFloor == this.targetFloor) {
@@ -66,9 +77,11 @@ function Elevator(parent, index, startFloor) {
                // ouch, we have more stops requested :(
                this.goUp = !this.goUp; // change direction we going into
                // and now find the furtherst floor from current:
-               this.targetFloor = Array.from(this.stopsRequested).sort(function(a, b){
+               var tempArray = Object.keys(this.stopsRequested).map(function (key) { return Number(key); });
+               tempArray.sort(function(a, b){
                   return Math.abs(b - self.currentFloor) - Math.abs(a - self.currentFloor);
-               })[0];
+               });
+               this.targetFloor = tempArray[0];
                // and fall through
             }                        
          }
@@ -84,11 +97,19 @@ function Elevator(parent, index, startFloor) {
       this.setDoorsState(false); // close doors
       if (this.isMoving()) 
          setTimeout(function() {
+            var oldFloor = self.currentFloor;
             if (self.goUp) 
                ++self.currentFloor;
             else
                --self.currentFloor;
-            self.move();
+            if (self.currentFloor < self.parent.getMinFloorNumber() || self.currentFloor > self.parent.getMaxFloorNumber()) {
+             // we need to stop
+               self.currentFloor = oldFloor;
+               self.setDoorsState(true);
+            } else {
+               self.parent.moveReported(self, self.currentFloor);
+               self.move();
+            }
          }, 100);
    };
 };
@@ -150,7 +171,13 @@ function ElevatorsController(elevatorsCount, floorsCount) {
    this.callElevator = function(fromFloor, goUp) {
       // let's get an elevator that will be tasked to go that floor:
       var elevator = this.findElevator(fromFloor, goUp);
-      elevator.stopsRequested[fromFloor] = fromFloor; // request elevator to stop at that floor
+
+      elevator.stopsRequested[fromFloor] = elevator.stopsRequested[fromFloor] || {}; // request elevator to stop at that floor
+      if (goUp)
+         elevator.stopsRequested[fromFloor].goUp = true;
+      else
+         elevator.stopsRequested[fromFloor].goDown = true;
+
       // now, we need to check two things:
       // 1. If elevator was not moving, just set target and move indicator, and be done with it:
       if (!elevator.targetFloor) {
@@ -174,6 +201,11 @@ function ElevatorsController(elevatorsCount, floorsCount) {
    this.reportDoorsState = function(elevator, open) {
       console.log('Elevator ' + elevator.index + (open ? ' opened' : ' closed') + ' doors.\n');
    }
+
+   // [fulfill requirements 2) at controller level]
+   this.moveReported = function(elevator, floor) {
+      console.log('Elevator ' + elevator.index + ' moved to ' + floor + ' floor.\n');
+   };   
 };
 
 
