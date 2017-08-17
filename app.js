@@ -1,3 +1,6 @@
+function normalizeNumber(n) {
+   return Math.round(n) % 1 === 0 ? Math.abs(Math.round(n)) : 0;
+}
 
 // helper function
 function isEmptyObject( obj ) {
@@ -133,6 +136,14 @@ function ElevatorsController(elevatorsCount, floorsCount) {
    this.floorsCount = floorsCount;
    this.getMinFloorNumber = function() {return 1;};
    this.getMaxFloorNumber = function() {return this.floorsCount;};
+   this.normalizeFloorNumber = function(floor) {
+      var f = normalizeNumber(floor) || 1;
+      if (f < this.getMinFloorNumber())
+         f = this.getMinFloorNumber();
+      else if (f > this.getMaxFloorNumber())
+         f = this.getMaxFloorNumber();
+      return f;
+   }
 
    // now let's create an array of elevators:
    this.elevators = Array.apply(null, Array(elevatorsCount)) // this will create Array[undef, ..., undef]
@@ -146,7 +157,7 @@ function ElevatorsController(elevatorsCount, floorsCount) {
    // fromFloor - from which floor user pushed the button
    // goUp - up or down button was pushed.
    this.findElevator = function(fromFloor, goUp) {
-
+      fromFloor = this.normalizeFloorNumber(fromFloor);
       // first, let's find elevator(s) standing at that floor:
       var result = this.elevators.filter(function(elevator){
          return elevator.currentFloor == fromFloor && !elevator.targetFloor;
@@ -178,6 +189,7 @@ function ElevatorsController(elevatorsCount, floorsCount) {
 
    // ok, now we need the function that will actually imitate user pushing the button:
    this.callElevator = function(fromFloor, goUp) {
+      fromFloor = this.normalizeFloorNumber(fromFloor);
       // let's get an elevator that will be tasked to go that floor:
       var elevator = this.findElevator(fromFloor, goUp);
 
@@ -219,7 +231,7 @@ function ElevatorsController(elevatorsCount, floorsCount) {
 
 
 // let's test it:
-var ec = new ElevatorsController(2, 8); // start with 1 elevator for now
+var ec = new ElevatorsController(3, 8); // start with 1 elevator for now
 ec.callElevator(2, true);
-ec.callElevator(5, true);
+ec.callElevator(500, true);
 ec.callElevator(3, false);
