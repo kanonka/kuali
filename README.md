@@ -1,1 +1,1 @@
-# kuali
+This assignment is completed.
