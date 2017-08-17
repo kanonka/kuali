@@ -1,4 +1,14 @@
 
+// helper function
+function isEmptyObject( obj ) {
+   for ( var name in obj ) {
+      return false;
+   }
+
+   return true;
+};
+
+
 // this class represents single elevator:
 function Elevator(parent, index, startFloor) {
    var self = this;
@@ -7,6 +17,7 @@ function Elevator(parent, index, startFloor) {
    this.index = index;           // index of this elevator in parent array of elevators
    this.currentFloor = startFloor; // initial floor 
    this.doorsOpen = false;       // doors are closed when elevator is created
+   this.stopsRequested = {};     // list of fllors where this elevatort should stop along the road
 
    // because we need to report doors open/close, we need to do it via function:
    // [fulfill requirements 3) at elevator level]
@@ -20,7 +31,66 @@ function Elevator(parent, index, startFloor) {
    // this function will decide if elevator will pass fromFloor when moving from currentFloor to targetFloor
    this.willPassFloor = function(fromFloor, goUp) {
       return this.targetFloor && ((this.currentFloor - fromFloor) * (this.targetFloor - currentFloor) <= 0);
-   }
+   };
+
+   // depending of direction, target and floor, decide if target should be changed ('extended'):
+   this.needChangeTarget = function(floor, goUp) {
+      return goUp == this.goUp &&                     // if go same direction AND
+            ((goUp && floor > this.targetFloor) ||    // if go up and (new) floor is higher than target OR
+             (!goUp && floor < this.targetFloor));    // if go down and (new) floor is lower  than target 
+   };
+
+   this.isMoving = function () {return !isEmptyObject(this.stopsRequested);};   
+   // this function actually 'moves' the elevator
+   this.move = function() {
+      // first, let's us check if we are on the floor where stop was requested:
+      if (this.stopsRequested[this.currentFloor]) {
+         // hey, we need to make a short stop here to let people in/out:
+         this.setDoorsState(true); // open the door
+         delete this.stopsRequested[this.currentFloor]; // depress internal floor button
+
+         // did we reach the target?
+         if (this.currentFloor == this.targetFloor) {
+            // ok, there are 2 choices: either this is really final stop, or
+            // users inside pressed button to other direction
+            if (isEmptyObject(this.stopsRequested)) {
+               // yes, this is REAL stop
+               delete this.targetFloor;
+               delete this.goUp;
+               // close doors by timeout:
+               setTimeout(function() {
+                  self.setDoorsState(false);
+               }, 100);
+               return; // no more moves
+            } else {
+               // ouch, we have more stops requested :(
+               this.goUp = !this.goUp; // change direction we going into
+               // and now find the furtherst floor from current:
+               this.targetFloor = Array.from(this.stopsRequested).sort(function(a, b){
+                  return Math.abs(b - self.currentFloor) - Math.abs(a - self.currentFloor);
+               })[0];
+               // and fall through
+            }                        
+         }
+         // nope, we didn't reach the target - but we stopped.
+         // Let's close doors by timeout, can continue to move:
+         setTimeout(function() {
+            self.setDoorsState(false);   // close doors
+            self.move(); // continue move
+         }, 100);
+         return; // and get out
+      }
+      // we are here if move was requested, but we were not requested to stop at this floor. Let's move:
+      this.setDoorsState(false); // close doors
+      if (this.isMoving()) 
+         setTimeout(function() {
+            if (self.goUp) 
+               ++self.currentFloor;
+            else
+               --self.currentFloor;
+            self.move();
+         }, 100);
+   };
 };
 
 
@@ -70,10 +140,33 @@ function ElevatorsController(elevatorsCount, floorsCount) {
             return Math.abs(fromFloor - a.targetFloor) - Math.abs(fromFloor - b.targetFloor);
          })[0];
       }
+
       return result.sort(function(a,b){
          return Math.abs(fromFloor - a.currentFloor) - Math.abs(fromFloor - b.currentFloor);
       })[0];      
    }
+
+   // ok, now we need the function that will actually imitate user pushing the button:
+   this.callElevator = function(fromFloor, goUp) {
+      // let's get an elevator that will be tasked to go that floor:
+      var elevator = this.findElevator(fromFloor, goUp);
+      elevator.stopsRequested[fromFloor] = fromFloor; // request elevator to stop at that floor
+      // now, we need to check two things:
+      // 1. If elevator was not moving, just set target and move indicator, and be done with it:
+      if (!elevator.targetFloor) {
+         elevator.targetFloor = fromFloor; // set destination
+         elevator.goUp = goUp;             // set direction
+         elevator.move();                  // start moving
+      } else {
+         // ok, elevator is moving, but imagine situation: it is moving from 2 to 4, and we just called it from 5th fllor
+         // We need to change target in this case. but, if we called it from the 1st fllor, we should not change target:
+         if (elevator.needChangeTarget(fromFloor, goUp))
+            elevator.targetFloor = fromFloor; // re-set destination
+      };
+
+      return elevator;
+
+   };
 
 
    //
@@ -83,4 +176,9 @@ function ElevatorsController(elevatorsCount, floorsCount) {
    }
 };
 
-// ??
+
+// let's test it:
+var ec = new ElevatorsController(1, 8); // start with 1 elevator for now
+ec.callElevator(2, true);
+ec.callElevator(5, true);
+ec.callElevator(3, false);
